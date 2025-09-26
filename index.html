@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TROLL Token Leaderboard & HODL Hierarchy</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a, #330066);
+            color: #fff;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+        th {
+            background: #333;
+        }
+        tr:hover {
+            background: #2a2a2a;
+        }
+        .loading {
+            text-align: center;
+            color: #ccc;
+        }
+        .mint-input {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        input {
+            padding: 10px;
+            width: 400px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .tower-container {
+            margin-top: 30px;
+            text-align: center;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            position: relative;
+            min-height: 400px;
+        }
+        .tower-block {
+            height: 25px;
+            margin: 3px;
+            cursor: pointer;
+            background: linear-gradient(90deg, #ff00ff, #00ffff);
+            border: 2px solid #fff;
+            border-radius: 5px;
+            transition: transform 0.3s, opacity 0.5s;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #000;
+            font-weight: bold;
+            font-size: 12px;
+            text-shadow: 0 0 5px #fff;
+            box-shadow: 0 0 10px #ff00ff, 0 0 20px #00ffff;
+        }
+        .tower-block:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 15px #0ff;
+        }
+        .tower-block.unstable {
+            animation: wobble 0.5s infinite;
+        }
+        .tower-block.removed {
+            transform: translateX(-1000px);
+            opacity: 0;
+            animation: spark 0.5s;
+        }
+        @keyframes wobble {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes spark {
+            0% { background: linear-gradient(90deg, #ff00ff, #00ffff); }
+            100% { background: linear-gradient(90deg, #ffff00, #ff0000); }
+        }
+        .crash {
+            color: #f00;
+            font-size: 24px;
+            font-weight: bold;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            animation: shake 0.5s, fade 2s;
+            text-shadow: 0 0 10px #f00;
+        }
+        @keyframes shake {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            25% { transform: translate(-50%, -50%) rotate(-5deg); }
+            75% { transform: translate(-50%, -50%) rotate(5deg); }
+            100% { transform: translate(-50%, -50%) rotate(0deg); }
+        }
+        @keyframes fade {
+            0% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .tower-score {
+            font-size: 20px;
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+            margin-bottom: 10px;
+        }
+        .particles {
+            position: absolute;
+            pointer-events: none;
+            animation: particleFade 1s forwards;
+        }
+        @keyframes particleFade {
+            0% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(2); }
+        }
+        .troll-logo {
+            display: block;
+            margin: 0 auto;
+            max-width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <img src="https://pump.mypinata.cloud/ipfs/QmY6nJ2Q2qG9eW8qW4B8z6n4v6Yk3f1x3g1Qz5q6z7k4r5?img-width=128" alt="TROLL" class="troll-logo">
+    <h1>TROLL Token Top 50 Holders Leaderboard</h1>
+    <a href="https://x.com/intent/tweet?text=Check out my TROLL token leaderboard and tower game!&url=https://your-username.github.io/troll-leaderboard/" target="_blank">Share on X</a>
+    <div class="mint-input">
+        <input type="text" id="mintAddress" placeholder="Enter Token Mint Address (e.g., 5UUH9RTDiSpq6HKS6bp4NdU9PNJpXRXuiw6ShBTBhgH2)" value="5UUH9RTDiSpq6HKS6bp4NdU9PNJpXRXuiw6ShBTBhgH2">
+        <button onclick="loadLeaderboard()">Load/Refresh</button>
+    </div>
+    <div id="loading" class="loading">Loading top holders...</div>
+    <table id="leaderboard">
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Wallet Address</th>
+                <th>Tokens Held</th>
+                <th>% of Supply</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <div class="tower-container">
+        <h2>HODL Hierarchy Tower 🚀</h2>
+        <p id="towerScore" class="tower-score">Tower Score: 0 (Combo: 1x)</p>
+        <div id="tower"></div>
+    </div>
+
+    <script>
+        const RPC_ENDPOINT = 'https://api.mainnet-beta.solana.com';
+
+        let previousHolders = [];
+        let towerScore = 0;
+        let comboCount = 1;
+        let lastClickTime = 0;
+
+        async function getTokenLargestAccounts(mint) {
+            const response = await fetch(`${RPC_ENDPOINT}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getTokenLargestAccounts',
+                    params: [mint, { commitment: 'confirmed' }]
+                })
+            });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            return data.result.value.map(acc => ({
+                address: acc.address,
+                amount: acc.uiAmount || 0
+            })).filter(holder => holder.amount > 0).slice(0, 50);
+        }
+
+        async function getTokenSupply(mint) {
+            const response = await fetch(`${RPC_ENDPOINT}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'getTokenSupply',
+                    params: [mint, { commitment: 'confirmed' }]
+                })
+            });
+            const data = await response.json();
+            if (data.error) throw new Error(data.error.message);
+            return data.result.value.uiAmount;
+        }
+
+        async function calculatePercentages(holders, mint) {
+            const totalSupply = await getTokenSupply(mint);
+            return holders.map(h => ({
+                ...h,
+                percentage: ((h.amount / totalSupply) * 100).toFixed(4)
+            }));
+        }
+
+        function displayLeaderboard(holders) {
+            const tbody = document.querySelector('#leaderboard tbody');
+            const loading = document.getElementById('loading');
+            loading.style.display = 'none';
+            tbody.innerHTML = '';
+            holders.forEach((holder, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><a href="https://solscan.io/account/${holder.address}" target="_blank">${holder.address.slice(0, 8)}...${holder.address.slice(-8)}</a></td>
+                    <td>${holder.amount.toLocaleString()}</td>
+                    <td>${holder.percentage}%</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function playCrash() {
+            const audio = new Audio('https://www.myinstants.com/media/sounds/crash.mp3');
+            audio.play().catch(() => console.log('Sound blocked'));
+        }
+
+        function createParticles(block) {
+            const rect = block.getBoundingClientRect();
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particles';
+                particle.style.width = '5px';
+                particle.style.height = '5px';
+                particle.style.background = '#ff0';
+                particle.style.borderRadius = '50%';
+                particle.style.position = 'absolute';
+                particle.style.left = `${rect.left + rect.width / 2}px`;
+                particle.style.top = `${rect.top + rect.height / 2}px`;
+                particle.style.transform = `translate(${Math.random() * 100 - 50}px, ${Math.random() * 100 - 50}px)`;
+                document.body.appendChild(particle);
+                setTimeout(() => particle.remove(), 1000);
+            }
+        }
+
+        function buildTower(holders) {
+            const tower = document.getElementById('tower');
+            tower.innerHTML = '';
+            const totalHeld = holders.reduce((sum, h) => sum + parseFloat(h.percentage), 0);
+            holders.slice(0, 15).forEach((holder, i) => {
+                const prev = previousHolders.find(p => p.address === holder.address);
+                const prevRank = prev ? previousHolders.indexOf(prev) : -1;
+                const isUnstable = prevRank > i || !prev;
+                const block = document.createElement('div');
+                block.className = 'tower-block';
+                block.style.width = `${50 + holder.percentage * 20}px`;
+                block.textContent = `${holder.address.slice(0, 8)}... (${holder.percentage}% 💎)`;
+                if (isUnstable) block.classList.add('unstable');
+                block.onclick = () => {
+                    if (isUnstable) {
+                        const now = Date.now();
+                        if (now - lastClickTime < 5000) comboCount++;
+                        else comboCount = 1;
+                        lastClickTime = now;
+                        const points = Math.round(holder.percentage * 10) * comboCount;
+                        towerScore += points;
+                        document.getElementById('towerScore').textContent = `Tower Score: ${towerScore} (Combo: ${comboCount}x)`;
+                        block.classList.add('removed');
+                        createParticles(block);
+                        if (totalHeld < 50) {
+                            tower.innerHTML = '<p class="crash">OH NO! Tower Crashed! 💥</p>';
+                            playCrash();
+                            setTimeout(() => buildTower(holders), 2000);
+                        }
+                    }
+                };
+                tower.appendChild(block);
+            });
+        }
+
+        async function loadLeaderboard() {
+            const mint = document.getElementById('mintAddress').value.trim();
+            if (!mint) {
+                alert('Please enter a mint address.');
+                return;
+            }
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            loading.textContent = 'Loading top holders...';
+            try {
+                const holders = await getTokenLargestAccounts(mint);
+                const withPercentages = await calculatePercentages(holders, mint);
+                displayLeaderboard(withPercentages);
+                previousHolders = [...withPercentages];
+                buildTower(withPercentages);
+                loading.textContent = `Updated: Top ${holders.length} holders loaded.`;
+            } catch (error) {
+                loading.textContent = `Error: ${error.message}. Check mint address.`;
+            }
+        }
+
+        setInterval(loadLeaderboard, 30000);
+        window.onload = loadLeaderboard;
+    </script>
+</body>
+</html>
